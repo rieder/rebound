@@ -3,7 +3,7 @@ Changelog
 
 This changelog only includes the most important changes in recent updates. For a full log of all changes, please refer to git.
 
-Version 3.2.2
+Version 3.2.3
 --------------
 * Various minor bug fixes. Added pre-timestep modifications for REBOUNDx. 
 
