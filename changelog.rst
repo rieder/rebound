@@ -3,6 +3,58 @@ Changelog
 
 This changelog only includes the most important changes in recent updates. For a full log of all changes, please refer to git.
 
+Version 3.5.11
+-------------
+* Changed default collision behaviour from hardsphere bouncing to halting the simulation. An exception is raised when using the python version. In C, you need to check the status flag after integrating the simulation.
+
+Version 3.5.10
+-------------
+* Refactored OrbitPlot.
+
+Version 3.5.9
+-------------
+* SIGINT handler added. Allows for garceful exit and keyboard interrupts (even from python).
+
+Version 3.5.8
+-------------
+* WebGL widget text overlay added.
+
+Version 3.5.7
+-------------
+* Bug fixes related to WebGL widget and ipywidgets version 6
+
+Version 3.5.6
+-------------
+* Updated WebGL widget to work with ipywidgets version 7
+
+Version 3.5.5
+-------------
+* Various fixed for Mercurius
+
+Version 3.5.4
+-------------
+* Bug fix for N_active=-1 (default)
+
+Version 3.5.3
+-------------
+* Allow for better parallelization of WHFast with OpenMP.
+* Addded example of the Solar System with Testparticles.
+* Made simulationarchive_append a public function (might be useful for some hacking projects).
+
+Version 3.5.2
+-------------
+* Fixes an issue with the WebGL widget.
+* Fixes an issue with external forces and MERCURIUS.
+
+Version 3.5.1
+-------------
+* MERCURIUS is not compatible with binary files and the SimulationArchive.
+
+Version 3.5.0
+-------------
+* The WHFast integrator now supports Jacobi coordinates (default), democratic heliocentric coordinates and WHDS coordinates. The previously separate WHFastHelio integrator has been removed. The coordinate system can now be changed by simply setting the coordinates flag in the ri_whfast struct.
+* Included a experimental new integrator MERCURIUS. This is similar to the hybrid integrator in Mercury but uses WHFast and IAS15. Not ready for production yet.
+
 Version 3.4.0
 -------------
 * Added a screenshot functionality for the WebGL ipython widget. This lets you take screenshots programmatically which is useful to create movies of simulations. 

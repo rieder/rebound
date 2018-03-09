@@ -50,6 +50,11 @@ class Encounter(Exception):
     You may want to search for the pair of bodies which have the smallest distance."""
     pass
 
+class Collision(Exception):
+    """The simulation exited because a collision has been detected.
+    You may want to search for which particles have a lastcollision time equal to the simulation time."""
+    pass
+
 class Escape(Exception):
     """The simulation exited because a particle has been se encounter has been detected.
     You may want to search for the particle with the largest distance from the 
@@ -64,11 +69,11 @@ class ParticleNotFound(Exception):
     """Particle was not found in the simulation."""
     pass
 
-from .simulation import Simulation, Orbit, Variation, reb_simulation_integrator_whfast, reb_simulation_integrator_sei
+from .simulation import Simulation, Orbit, Variation, reb_simulation_integrator_whfast, reb_simulation_integrator_sei, reb_simulation_integrator_mercurius
 from .particle import Particle
 from .plotting import OrbitPlot
 from .tools import hash
 from .simulationarchive import SimulationArchive
 from .interruptible_pool import InterruptiblePool
 
-__all__ = ["__version__", "__build__", "__githash__", "SimulationArchive", "Simulation", "Orbit", "OrbitPlot", "Particle", "SimulationError", "Encounter", "Escape", "NoParticles", "ParticleNotFound", "InterruptiblePool","Variation", "reb_simulation_integrator_whfast", "reb_simulation_integrator_sei"]
+__all__ = ["__version__", "__build__", "__githash__", "SimulationArchive", "Simulation", "Orbit", "OrbitPlot", "Particle", "SimulationError", "Encounter", "Collision", "Escape", "NoParticles", "ParticleNotFound", "InterruptiblePool","Variation", "reb_simulation_integrator_whfast", "reb_simulation_integrator_sei","reb_simulation_integrator_mercurius", "clibrebound"]

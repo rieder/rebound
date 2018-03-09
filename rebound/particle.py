@@ -4,6 +4,7 @@ import math
 import ctypes.util
 import rebound
 import sys
+import random
 
 __all__ = ["Particle"]
 
@@ -50,7 +51,7 @@ class Particle(Structure):
    
     __repr__ = __str__
 
-    def __init__(self, simulation=None, particle=None, m=None, x=None, y=None, z=None, vx=None, vy=None, vz=None, primary=None, a=None, P=None, e=None, inc=None, Omega=None, omega=None, pomega=None, f=None, M=None, l=None, theta=None, T=None, r=None, date=None, variation=None, variation2=None, h=None, k=None, ix=None, iy=None, hash=0):
+    def __init__(self, simulation=None, particle=None, m=None, x=None, y=None, z=None, vx=None, vy=None, vz=None, primary=None, a=None, P=None, e=None, inc=None, Omega=None, omega=None, pomega=None, f=None, M=None, l=None, theta=None, T=None, r=None, date=None, variation=None, variation2=None, h=None, k=None, ix=None, iy=None, hash=0, jacobi_masses=False):
         """
         Initializes a Particle structure. Rather than explicitly creating 
         a Particle structure, users may use the ``add()`` member function 
@@ -138,7 +139,8 @@ class Particle(Structure):
             Can be one of the following: m, a, e, inc, omega, Omega, f, k, h, lambda, ix, iy.
         hash        : c_uint32  
             Unsigned integer identifier for particle.  Can pass an integer directly, or a string that will be converted to a hash. User is responsible for assigning unique hashes.
-
+        jacobi_masses: bool
+            Whether to use jacobi primary mass in orbit initialization. Particle mass will still be set to physical value (Default: False)
         Examples
         --------
 
@@ -147,8 +149,24 @@ class Particle(Structure):
         >>> p1 = rebound.Particle(simulation=sim, m=0.001, a=0.5, e=0.01)
         >>> p2 = rebound.Particle(simulation=sim, m=0.0, x=1., vy=1.)
         >>> p3 = rebound.Particle(simulation=sim, m=0.001, a=1.5, h=0.1, k=0.2, l=0.1)
+        >>> p4 = rebound.Particle(simulation=sim, m=0.001, a=1.5, omega="uniform")  # omega will be a random number between 0 and 2pi
 
         """        
+
+        if Omega == "uniform":
+            Omega = random.vonmisesvariate(0.,0.) 
+        if omega == "uniform":
+            omega = random.vonmisesvariate(0.,0.) 
+        if pomega == "uniform":
+            pomega = random.vonmisesvariate(0.,0.) 
+        if f == "uniform":
+            f = random.vonmisesvariate(0.,0.) 
+        if M == "uniform":
+            M = random.vonmisesvariate(0.,0.) 
+        if l == "uniform":
+            l = random.vonmisesvariate(0.,0.) 
+        if theta == "uniform":
+            theta = random.vonmisesvariate(0.,0.) 
 
         self.hash = hash # set via the property, which checks for type
 
@@ -222,7 +240,7 @@ class Particle(Structure):
         if m is None:
             self.m = 0.
         else:
-            self.m = m
+            self.m = m 
         if r is None:
             self.r = 0.
         else:
@@ -241,6 +259,12 @@ class Particle(Structure):
             if primary is None:
                 clibrebound.reb_get_com.restype = Particle
                 primary = clibrebound.reb_get_com(byref(simulation)) # this corresponds to adding in Jacobi coordinates
+            if jacobi_masses is True:
+                interior_mass = 0
+                for p in simulation.particles:
+                    interior_mass += p.m
+                # orbit conversion uses mu=G*(p.m+primary.m) so set prim.m=Mjac-m so mu=G*Mjac
+                primary.m = simulation.particles[0].m*(self.m + interior_mass)/interior_mass - self.m
             if a is None and P is None:
                 raise ValueError("You need to pass either a semimajor axis or orbital period to initialize the particle using orbital elements.")
             if a is not None and P is not None:
@@ -259,6 +283,8 @@ class Particle(Structure):
                     ix = 0.
                 if iy is None:
                     iy = 0.
+                if((ix*ix + iy*iy) > 4.0):
+                    raise ValueError("Passed (ix, iy) coordinates are not valid, squared sum exceeds 4.")
                 clibrebound.reb_tools_pal_to_particle.restype = Particle
                 p = clibrebound.reb_tools_pal_to_particle(c_double(simulation.G), primary, c_double(self.m), c_double(a), c_double(l), c_double(k), c_double(h), c_double(ix), c_double(iy))
             else:
@@ -306,6 +332,7 @@ class Particle(Structure):
                                     M = Omega - omega - l   # for retrograde, l = Omega - omega - M
                             else:
                                 if T is not None:           # works for both elliptical and hyperbolic orbits
+                                                            # TODO: has accuracy problems for M=n*(t-T) << 1
                                     n = (simulation.G*(primary.m+self.m)/abs(a**3))**0.5
                                     M = n*(simulation.t - T)
                             clibrebound.reb_tools_M_to_f.restype = c_double
@@ -324,7 +351,8 @@ class Particle(Structure):
                     raise ValueError("Unbound orbit (a < 0) must have e > 1.")
                 if err.value == 5:
                     raise ValueError("Unbound orbit can't have f beyond the range allowed by the asymptotes set by the hyperbola.")
-            self.m = p.m
+                if err.value == 6:
+                    raise ValueError("Primary has no mass.")
             self.x = p.x
             self.y = p.y
             self.z = p.z
@@ -363,7 +391,8 @@ class Particle(Structure):
         """ 
         Returns a rebound.Orbit object with the keplerian orbital elements
         corresponding to the particle around the passed primary
-        (rebound.Particle) If no primary is passed, defaults to Jacobi coordinates. 
+        (rebound.Particle) If no primary is passed, defaults to Jacobi coordinates
+        (with mu = G*Minc, where Minc is the total mass from index 0 to the particle's index, inclusive). 
         
         Examples
         --------
@@ -416,6 +445,54 @@ class Particle(Structure):
 
         return o
     
+    def sample_orbit(self, Npts=100, primary=None, trailing=True, timespan=None, useTrueAnomaly=True):
+        """
+        Returns a nested list of xyz positions along the osculating orbit of the particle. 
+        If primary is not passed, returns xyz positions along the Jacobi osculating orbit
+        (with mu = G*Minc, where Minc is the total mass from index 0 to the particle's index, inclusive). 
+
+        Parameters
+        ----------
+        Npts    : int, optional  
+            Number of points along the orbit to return  (default: 100)
+        primary : rebound.Particle, optional
+            Primary to use for the osculating orbit (default: Jacobi center of mass)
+        trailing: bool, optional
+            Whether to return points stepping backwards in time (True) or forwards (False). (default: True)
+        timespan: float, optional    
+            Return points (for the osculating orbit) from the current position to timespan (forwards or backwards in time depending on trailing keyword). 
+            Defaults to the orbital period for bound orbits, and to the rough time it takes the orbit to move by the current distance from the primary for a hyperbolic orbit. Implementation currently only supports this option if useTrueAnomaly=False.
+        useTrueAnomaly: bool, optional
+            Will sample equally spaced points in true anomaly if True, otherwise in mean anomaly.
+            Latter might be better for hyperbolic orbits, where true anomaly can stay near the limiting value for a long time, and then switch abruptly at pericenter. (Default: True)
+        """
+        pts = []
+        if primary is None:
+            primary = self.jacobi_com
+        o = self.calculate_orbit(primary=primary)
+
+        if timespan is None:
+            if o.a < 0.: # hyperbolic orbit
+                timespan = 2*math.pi*o.d/o.v # rough time to cross display box
+            else:
+                timespan = o.P
+        
+        lim_phase = abs(o.n)*timespan # n is negative for hyperbolic orbits
+
+        if trailing is True:
+            lim_phase *= -1 # sample phase backwards from current value
+        phase = [lim_phase*i/(Npts-1) for i in range(Npts)]
+
+        for i,ph in enumerate(phase):
+            if useTrueAnomaly is True:
+                newp = Particle(a=o.a, f=o.f+ph, inc=o.inc, omega=o.omega, Omega=o.Omega, e=o.e, m=self.m, primary=primary, simulation=self._sim.contents)
+            else: 
+                newp = Particle(a=o.a, M=o.M+ph, inc=o.inc, omega=o.omega, Omega=o.Omega, e=o.e, m=self.m, primary=primary, simulation=self._sim.contents)
+
+            pts.append(newp.xyz)
+        
+        return pts
+
     # Simple operators for particles.
 
     def __sub__(self, other):

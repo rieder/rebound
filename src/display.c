@@ -50,6 +50,7 @@
 #include <GLFW/glfw3.h>
 
 static void reb_display(GLFWwindow* window);
+static void reb_display_set_default_scale(struct reb_simulation* const r);
                 
 static const char* onscreenhelp[] = { 
                 "REBOUND OPENGL mouse and keyboard commands",
@@ -348,12 +349,24 @@ static void reb_display_keyboard(GLFWwindow* window, int key, int scancode, int 
                 }
                 break;
             case 'R':
-                data->view.x = 0.;
-                data->view.y = 0.;
-                data->view.z = 0.;
-                data->view.w = 1.;
+                if (data->view.w ==1.){
+                    data->view.x = 1./sqrt(2.);
+                    data->view.y = 0.;
+                    data->view.z = 0.;
+                    data->view.w = 1./sqrt(2.);
+                }else if (data->view.x == 1./sqrt(2.)){
+                    data->view.x = 0.;
+                    data->view.y = -1./sqrt(2.);
+                    data->view.z = 0.;
+                    data->view.w = 1./sqrt(2.);
+                }else{
+                    data->view.x = 0.;
+                    data->view.y = 0.;
+                    data->view.z = 0.;
+                    data->view.w = 1.;
+                }
                 data->reference     = -1;
-                data->scale = data->r->boxsize_max/2.;
+                reb_display_set_default_scale(data->r);
                 break;
             case 'D':
                 data->pause = !data->pause;
@@ -420,9 +433,9 @@ static void reb_display(GLFWwindow* window){
         quat2mat(data->view,view);
     }
     
-    for (int i=-data->ghostboxes*data->r->nghostx;i<=data->ghostboxes*data->r->nghostx;i++){
-    for (int j=-data->ghostboxes*data->r->nghosty;j<=data->ghostboxes*data->r->nghosty;j++){
-    for (int k=-data->ghostboxes*data->r->nghostz;k<=data->ghostboxes*data->r->nghostz;k++){
+    for (int i=-data->ghostboxes*data->r_copy->nghostx;i<=data->ghostboxes*data->r_copy->nghostx;i++){
+    for (int j=-data->ghostboxes*data->r_copy->nghosty;j<=data->ghostboxes*data->r_copy->nghosty;j++){
+    for (int k=-data->ghostboxes*data->r_copy->nghostz;k<=data->ghostboxes*data->r_copy->nghostz;k++){
         struct reb_ghostbox gb = reb_boundary_get_ghostbox(data->r_copy, i,j,k);
         { // Particles
             mattranslate(tmp2,gb.shiftx,gb.shifty,gb.shiftz);
@@ -453,19 +466,19 @@ static void reb_display(GLFWwindow* window){
                 glUseProgram(data->orbit_shader_program);
                 glBindVertexArray(data->orbit_shader_particle_vao);
                 glUniformMatrix4fv(data->orbit_shader_mvp_location, 1, GL_TRUE, (GLfloat*) tmp2);
-                glDrawArraysInstanced(GL_LINE_STRIP, 0, data->orbit_shader_vertex_count, data->r->N-1);
+                glDrawArraysInstanced(GL_LINE_STRIP, 0, data->orbit_shader_vertex_count, data->r_copy->N-1);
                 glBindVertexArray(0);
             }
         }
         { // Box
             glUseProgram(data->box_shader_program);
-            if (data->r->boundary == REB_BOUNDARY_NONE){
+            if (data->r_copy->boundary == REB_BOUNDARY_NONE){
                 glBindVertexArray(data->box_shader_cross_vao);
             }else{
                 glBindVertexArray(data->box_shader_box_vao);
             }
             glUniform4f(data->box_shader_color_location, 1.,0.,0.,1.);
-            matscale(tmp1,data->r->boxsize_max/2.);
+            matscale(tmp1,data->r_copy->boxsize_max/2.);
             mattranslate(tmp2,gb.shiftx,gb.shifty,gb.shiftz);
             matmult(tmp2,tmp1,tmp3);
             matmult(view,tmp3,tmp1);
@@ -572,12 +585,10 @@ void reb_display_init(struct reb_simulation * const r){
 
     glfwSetErrorCallback(reb_glfw_error_callback);
     glfwWindowHint(GLFW_SAMPLES, 4);
-#ifdef _APPLE
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, 1);
-#endif // _APPLE
 
     GLFWwindow*  window = glfwCreateWindow(700, 700, "rebound", NULL, NULL);
     if (!window){
@@ -601,7 +612,7 @@ void reb_display_init(struct reb_simulation * const r){
     data->spheres       = 0; 
     data->pause         = 0; 
     data->multisample = 1; 
-    if (data->r->integrator==REB_INTEGRATOR_WHFAST || data->r->integrator==REB_INTEGRATOR_WHFASTHELIO){
+    if (data->r->integrator==REB_INTEGRATOR_WHFAST){
         data->wire          = 1; 
     }else{
         data->wire          = 0; 
@@ -611,11 +622,8 @@ void reb_display_init(struct reb_simulation * const r){
     data->ghostboxes    = 0; 
     data->reference     = -1;
     data->view.w        = 1.;
-    data->p_h_copy      = NULL;
-    data->p_j_copy      = NULL;
-    data->eta_copy      = NULL;
+    data->p_jh_copy      = NULL;
     data->allocated_N_whfast = 0;
-    data->allocated_N_whfasthelio = 0;
 
     glfwSetKeyCallback(window,reb_display_keyboard);
     glfwGetInputMode(window, GLFW_STICKY_MOUSE_BUTTONS);
@@ -1038,6 +1046,25 @@ void reb_display_init(struct reb_simulation * const r){
 }
 #endif // OPENGL
 
+static void reb_display_set_default_scale(struct reb_simulation* const r){
+    // Need a scale for visualization
+    if (r->root_size==-1){  
+        r->display_data->scale = 0.;
+        const struct reb_particle* p = r->particles;
+        for (int i=0;i<r->N;i++){
+            const double _r = sqrt(p[i].x*p[i].x+p[i].y*p[i].y+p[i].z*p[i].z);
+            r->display_data->scale = MAX(r->display_data->scale, _r);
+        }
+        if(r->display_data->scale==0.){
+            r->display_data->scale = 1.;
+        }
+        r->display_data->scale *= 1.1;
+    }else{
+        r->display_data->scale = r->boxsize_max/2.;
+    }
+}
+
+
 void reb_display_init_data(struct reb_simulation* const r){
     if (r->display_data==NULL){
         r->display_data = calloc(sizeof(struct reb_display_data),1);
@@ -1045,20 +1072,7 @@ void reb_display_init_data(struct reb_simulation* const r){
         if (pthread_mutex_init(&(r->display_data->mutex), NULL)){
             reb_error(r,"Mutex creation failed.");
         }
-        // Need a scale for visualization
-        if (r->root_size==-1){  
-            const struct reb_particle* p = r->particles;
-            for (int i=0;i<r->N;i++){
-                const double _r = sqrt(p[i].x*p[i].x+p[i].y*p[i].y+p[i].z*p[i].z);
-                r->display_data->scale = MAX(r->display_data->scale, _r);
-            }
-            if(r->display_data->scale==0.){
-                r->display_data->scale = 1.;
-            }
-            r->display_data->scale *= 1.1;
-        }else{
-            r->display_data->scale = r->boxsize_max/2.;
-        }
+        reb_display_set_default_scale(r);
     }
 }
 
@@ -1077,27 +1091,19 @@ int reb_display_copy_data(struct reb_simulation* const r){
     memcpy(data->r_copy, r, sizeof(struct reb_simulation));
     memcpy(data->particles_copy, r->particles, sizeof(struct reb_particle)*r->N);
     data->r_copy->particles = data->particles_copy;
-    if (r->integrator==REB_INTEGRATOR_WHFAST && r->ri_whfast.is_synchronized==0){
+    if (
+            (r->integrator==REB_INTEGRATOR_WHFAST && r->ri_whfast.is_synchronized==0)
+            ||   
+            (r->integrator==REB_INTEGRATOR_MERCURIUS && r->ri_mercurius.is_synchronized==0))
+       {
         if (r->ri_whfast.allocated_N > data->allocated_N_whfast){
             size_changed = 1;
             data->allocated_N_whfast = r->ri_whfast.allocated_N;
-            data->p_j_copy = realloc(data->p_j_copy,data->allocated_N_whfast*sizeof(struct reb_particle));
-            data->eta_copy = realloc(data->eta_copy,data->allocated_N_whfast*sizeof(double));
+            data->p_jh_copy = realloc(data->p_jh_copy,data->allocated_N_whfast*sizeof(struct reb_particle));
         }
-        memcpy(data->p_j_copy, r->ri_whfast.p_j, data->allocated_N_whfast*sizeof(struct reb_particle));
-        memcpy(data->eta_copy, r->ri_whfast.eta, data->allocated_N_whfast*sizeof(double));
+        memcpy(data->p_jh_copy, r->ri_whfast.p_jh, data->allocated_N_whfast*sizeof(struct reb_particle));
     }
-    data->r_copy->ri_whfast.p_j= data->p_j_copy;
-    data->r_copy->ri_whfast.eta= data->eta_copy;
-    if (r->integrator==REB_INTEGRATOR_WHFASTHELIO && r->ri_whfasthelio.is_synchronized==0){
-        if (r->ri_whfasthelio.allocated_N > data->allocated_N_whfast){
-            size_changed = 1;
-            data->allocated_N_whfasthelio = r->ri_whfasthelio.allocated_N;
-            data->p_h_copy = realloc(data->p_h_copy,data->allocated_N_whfasthelio*sizeof(struct reb_particle));
-        }
-        memcpy(data->p_h_copy, r->ri_whfasthelio.p_h, data->allocated_N_whfasthelio*sizeof(struct reb_particle));
-    }
-    data->r_copy->ri_whfasthelio.p_h= data->p_h_copy;
+    data->r_copy->ri_whfast.p_jh= data->p_jh_copy;
     
     return size_changed;
 }
@@ -1107,7 +1113,7 @@ void reb_display_prepare_data(struct reb_simulation* const r, int orbits){
     struct reb_display_data* data = r->display_data;
     struct reb_simulation* const r_copy = data->r_copy;
 
-    // this only does something for WHFAST + WHFASTHELIO
+    // this only does something for WHFAST + MERCURIUS
     reb_integrator_synchronize(r_copy);
        
     // Update data on GPU 
@@ -1123,7 +1129,7 @@ void reb_display_prepare_data(struct reb_simulation* const r, int orbits){
     }
     if (orbits){
         struct reb_particle com = r_copy->particles[0];
-        for (int i=1;i<r->N;i++){
+        for (int i=1;i<r_copy->N;i++){
             struct reb_particle p = r_copy->particles[i];
             data->orbit_data[i-1].x  = com.x;
             data->orbit_data[i-1].y  = com.y;
