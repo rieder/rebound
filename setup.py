@@ -17,7 +17,7 @@ try:
     ghash = subprocess.check_output(["git", "rev-parse", "HEAD"]).decode("ascii")
     ghash_arg = "-DGITHASH="+ghash.strip()
 except:
-    ghash_arg = "-DGITHASH=c7087474e5b18039d66c506088164c06e2c3659e" #GITHASHAUTOUPDATE
+    ghash_arg = "-DGITHASH=895c45a0ae3a8d0441688dbdd3201744614fffc3" #GITHASHAUTOUPDATE
 
 extra_link_args=[]
 if sys.platform == 'darwin':
@@ -44,6 +44,7 @@ libreboundmodule = Extension('librebound',
                                 'src/derivatives.c',
                                 'src/tree.c',
                                 'src/particle.c',
+                                'src/binarydiff.c',
                                 'src/output.c',
                                 'src/input.c',
                                 'src/simulationarchive.c',
@@ -61,7 +62,7 @@ with open(os.path.join(here, 'README.rst'), encoding='utf-8') as f:
     long_description = f.read()
 
 setup(name='rebound',
-    version='3.5.12',
+    version='3.6.2',
     description='An open-source multi-purpose N-body code',
     long_description=long_description,
     url='http://github.com/hannorein/rebound',

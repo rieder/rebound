@@ -3,8 +3,23 @@ Changelog
 
 This changelog only includes the most important changes in recent updates. For a full log of all changes, please refer to git.
 
+Version 3.6.1
+--------------
+* Removed function calls to open_memstream and fmemopen which might not work on older Mac OSX versions. This only affects the internals and there are no changes to user interface. 
+* Minor bug fixes
+
+Version 3.6.0
+--------------
+* SimulationArchive Version 2. With the new version of the SimulationArchive file format, you can now create snapshots of your simulations without any restrictions. You can change the number of particles, the timestep, even the integrator used during the integration. REBOUND automatically detects what has changed and only stores the differences in incremental snaphots. This reduces the filesize while keeping the format as flexible as possible. The old SimulationArchive Version 1 is still supported for now but might become deprecated in the future. All examples have been updated. As usual these are as usual good starting points for understanding the functionality and the syntax. 
+
+Version 3.5.12
+--------------
+* Added REB_COLLISION_LINE. This is a collision detection routine which serves for collisions during the last timestep, assuming that all particles travel along straight lines. This can be useful in cases where not every collision needs to be detected exactly, but the overall collision rate should be reproduced. The algorithm is O(N**2).
+* Bug related to N_active and variational particles has been fixed.
+* A bug where WHFast might not converge in rare cases involving negative timesteps has been fixed.
+
 Version 3.5.11
--------------
+--------------
 * Changed default collision behaviour from hardsphere bouncing to halting the simulation. An exception is raised when using the python version. In C, you need to check the status flag after integrating the simulation.
 
 Version 3.5.10
